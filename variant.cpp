@@ -22,7 +22,10 @@ public:
     
     void foo() override
     {
-        c = a + b;
+        for(int i = 0; i < 10; ++i)
+        {
+            c = a + b + i;
+        }
     }
 
 private:
@@ -39,7 +42,10 @@ public:
     
     void foo() override
     {
-        c = a * b;
+        for(int i = 0; i < 10; ++i)
+        {
+            c = a * b * i;
+        }
     }
 
 private:
@@ -50,6 +56,7 @@ private:
 
 int main()
 {
+    // Test std::array of std::unique_ptrs
     {
         std::array<std::unique_ptr<Base>, MAX_NUM> arr;
 
@@ -77,6 +84,7 @@ int main()
         std::cout << "Using pointers: " << dur.count() << "us\n";
     }
 
+    // Test std::array of std::variants
     {
         std::array<std::variant<Derived1, Derived2>, MAX_NUM> arr;
         
@@ -108,6 +116,42 @@ int main()
         
         auto dur = std::chrono::duration_cast<std::chrono::microseconds>(finish-start);
         std::cout << "Using std::variant: " << dur.count() << "us\n";
+    }
+
+    // Test std::array of pointers to objects in other arrays
+    {
+        std::array<Base*, MAX_NUM> arr;
+        std::array<std::unique_ptr<Derived1>, MAX_NUM> der1s;
+        std::array<std::unique_ptr<Derived2>, MAX_NUM> der2s;
+
+        for(int i = 0; i < MAX_NUM; ++i)
+        {
+            der1s[i] = std::make_unique<Derived1>();
+            der2s[i] = std::make_unique<Derived2>();
+        }
+
+        for(int i = 0; i < MAX_NUM; ++i)
+        {
+            if(i % 2 == 0)
+            {
+                arr[i] = der1s[i].get();
+            } else
+            {
+                arr[i] = der2s[i].get();
+            }
+        }
+        
+        auto start = std::chrono::high_resolution_clock::now();
+
+        for(auto& obj : arr)
+        {
+            obj->foo();
+        }
+
+        auto finish = std::chrono::high_resolution_clock::now();
+        
+        auto dur = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
+        std::cout << "Using pointers to objects: " << dur.count() << "us\n";
     }
 
     return 0;
