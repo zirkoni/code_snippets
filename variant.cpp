@@ -2,8 +2,10 @@
 #include <array>
 #include <variant>
 #include <chrono>
+#include <cstring>
 
 constexpr int MAX_NUM = 10000;
+constexpr int NUM_LOOPS = 10;
 
 class Base
 {
@@ -22,7 +24,7 @@ public:
     
     void foo() override
     {
-        for(int i = 0; i < 10; ++i)
+        for(int i = 0; i < NUM_LOOPS; ++i)
         {
             c = a + b + i;
         }
@@ -42,7 +44,7 @@ public:
     
     void foo() override
     {
-        for(int i = 0; i < 10; ++i)
+        for(int i = 0; i < NUM_LOOPS; ++i)
         {
             c = a * b * i;
         }
@@ -152,6 +154,66 @@ int main()
         
         auto dur = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
         std::cout << "Using pointers to objects: " << dur.count() << "us\n";
+    }
+    
+    // Test union
+    {
+        struct UnionOfDerived
+        {
+            bool isDer1;
+            
+            union
+            {
+                Derived1 der1;
+                Derived2 der2;
+            };
+            
+            UnionOfDerived() { std::memset(this, 0, sizeof(UnionOfDerived)); }
+            ~UnionOfDerived() {}
+            
+            void selectDer1()
+            {
+                isDer1 = true;
+                der1 = Derived1();
+            }
+            
+            void selectDer2()
+            {
+                isDer1 = false;
+                der2 = Derived2();
+            }
+        };
+        
+        std::array<UnionOfDerived, MAX_NUM> arr;
+        
+        for(int i = 0; i < MAX_NUM; ++i)
+        {
+            if(i % 2 == 0)
+            {
+                arr[i].selectDer1();
+            } else
+            {
+                arr[i].selectDer2();
+            }
+        }
+        
+        auto start = std::chrono::high_resolution_clock::now();
+
+        for(auto& obj : arr)
+        {
+            if(obj.isDer1)
+            {
+                obj.der1.foo();
+            } else
+            {
+                obj.der2.foo();
+            }
+        }
+
+        auto finish = std::chrono::high_resolution_clock::now();
+        
+        auto dur = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
+        std::cout << "Using union: " << dur.count() << "us\n";
     }
 
     return 0;
