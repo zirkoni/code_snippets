@@ -19,41 +19,69 @@ public:
 class Derived1: public Base
 {
 public:
-    Derived1() = default;
+    Derived1(int a = 1, int b = 2, int c = 0): m_a(a), m_b(b), m_c(c) {}
     ~Derived1() = default;
     
     void foo() override
     {
         for(int i = 0; i < NUM_LOOPS; ++i)
         {
-            c = a + b + i;
+            m_c = m_a + m_b + i;
         }
     }
 
 private:
-    int a{1};
-    int b{2};
-    int c{0};
+    int m_a;
+    int m_b;
+    int m_c;
 };
 
 class Derived2: public Base
 {
 public:
-    Derived2() = default;
+    Derived2(float a = 1.0f, float b = 2.0f, float c = 0.0f): m_a(a), m_b(b), m_c(c) {}
     ~Derived2() = default;
     
     void foo() override
     {
         for(int i = 0; i < NUM_LOOPS; ++i)
         {
-            c = a * b * i;
+            m_c = m_a * m_b * i;
         }
     }
 
 private:
-    float a{1.f};
-    float b{2.f};
-    float c{0.f};
+    float m_a;
+    float m_b;
+    float m_c;
+};
+
+// Static pool, no deallocation method!
+template<size_t SIZE>
+class MemoryPool
+{
+public:
+    MemoryPool()
+    {
+        m_used = 0;
+    }
+
+    uint64_t* allocate(size_t size)
+    {
+        uint8_t* ptr = m_pool + m_used;
+        m_used += size;
+
+        if(m_used > SIZE)
+        {
+            throw std::bad_alloc();
+        }
+
+        return reinterpret_cast<uint64_t*>(ptr);
+    }
+    
+private:
+    uint8_t m_pool[SIZE];
+    size_t m_used;
 };
 
 int main()
@@ -66,10 +94,10 @@ int main()
         {
             if(i % 2 == 0)
             {
-                arr[i] = std::make_unique<Derived1>();
+                arr[i] = std::make_unique<Derived1>(i, 2 * i, 10);
             } else
             {
-                arr[i] = std::make_unique<Derived2>();
+                arr[i] = std::make_unique<Derived2>(2.0f * i, 3.0f, 0.0f);
             }
         }
         
@@ -84,6 +112,39 @@ int main()
         
         auto dur = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
         std::cout << "Using pointers: " << dur.count() << "us\n";
+    }
+    
+    // Test std::array of ptrs with a memory pool
+    {
+        constexpr size_t poolSize = MAX_NUM * std::max(sizeof(Derived1), sizeof(Derived2));
+        
+        MemoryPool<poolSize> pool;
+        std::array<Base*, MAX_NUM> arr;
+
+        for(int i = 0; i < MAX_NUM; ++i)
+        {
+            if(i % 2 == 0)
+            {
+                uint64_t* buffer = pool.allocate(sizeof(Derived1));
+                arr[i] = new (buffer) Derived1(1, 2, 0);
+            } else
+            {
+                uint64_t* buffer = pool.allocate(sizeof(Derived2));
+                arr[i] = new (buffer) Derived2(0.0f, 0.0f, 0.0f);
+            }
+        }
+        
+        auto start = std::chrono::high_resolution_clock::now();
+
+        for(auto& obj : arr)
+        {
+            obj->foo();
+        }
+
+        auto finish = std::chrono::high_resolution_clock::now();
+        
+        auto dur = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
+        std::cout << "Using memory pool: " << dur.count() << "us\n";
     }
 
     // Test std::array of std::variants
